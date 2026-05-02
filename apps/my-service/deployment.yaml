@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: my-service
-        image: ghcr.io/dvarshney1975-stack/my-service:4644f250b17be9d8eb20fbe76dbf9a6693c97560
+        image: ghcr.io/dvarshney1975-stack/my-service:1a10d02c03a489d7eaa80755180d14210b10ad12
         ports:
         - containerPort: 8080
         env:
