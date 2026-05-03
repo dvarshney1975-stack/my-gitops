@@ -56,13 +56,20 @@ spec:
             path: /var/lib/grafana/dashboards/default
     dashboards:
       default:
-        kubernetes-cluster:
-          gnetId: 7249
+        # Works with basic prometheus chart (kube-state-metrics)
+        k8s-cluster:
+          gnetId: 6417
           revision: 1
           datasource: Prometheus
+        # Works with node-exporter
         node-exporter:
           gnetId: 1860
           revision: 37
+          datasource: Prometheus
+        # Pod-level metrics (kube-state-metrics)
+        kube-state:
+          gnetId: 13332
+          revision: 12
           datasource: Prometheus
     ingress:
       enabled: true
