@@ -13,6 +13,8 @@ spec:
       labels:
         app: agentgate-admin
     spec:
+      imagePullSecrets:
+      - name: ghcr-pull-secret
       containers:
       - name: admin
         image: ghcr.io/dvarshney1975-stack/agentgate-admin:latest
