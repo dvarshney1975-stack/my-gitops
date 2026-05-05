@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgate-marketplace
+  namespace: agentgate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentgate-marketplace
+  template:
+    metadata:
+      labels:
+        app: agentgate-marketplace
+    spec:
+      containers:
+      - name: marketplace
+        image: ghcr.io/dvarshney1975-stack/agentgate-marketplace:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentgate-marketplace
+  namespace: agentgate
+spec:
+  selector:
+    app: agentgate-marketplace
+  ports:
+  - port: 80
+    targetPort: 3000

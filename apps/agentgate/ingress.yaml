@@ -1,0 +1,80 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentgate-marketplace
+  namespace: agentgate
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - marketplace-3-135-43-26.sslip.io
+    secretName: agentgate-marketplace-tls
+  rules:
+  - host: marketplace-3-135-43-26.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agentgate-marketplace
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentgate-admin
+  namespace: agentgate
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - admin-3-135-43-26.sslip.io
+    secretName: agentgate-admin-tls
+  rules:
+  - host: admin-3-135-43-26.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agentgate-admin
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentgate-api
+  namespace: agentgate
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - api-3-135-43-26.sslip.io
+    secretName: agentgate-api-tls
+  rules:
+  - host: api-3-135-43-26.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agentgate-api
+            port:
+              number: 80
