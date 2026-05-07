@@ -23,8 +23,10 @@ metadata:
   namespace: agentgate
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
+  # Use the default RollingUpdate strategy — Server-Side Apply rejects
+  # `Recreate` when the existing Deployment carries rollingUpdate fields,
+  # and the init container's migration runner is idempotent so brief
+  # overlap is fine.
   selector:
     matchLabels:
       app: agentgate-api
