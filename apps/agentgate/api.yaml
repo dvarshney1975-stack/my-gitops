@@ -1,3 +1,21 @@
+# Per-app config: ENCRYPTION_KEY (32-byte AES, hex-encoded), platform URL,
+# Vault dev-mode token, Redis URL.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentgate-config
+  namespace: agentgate
+type: Opaque
+stringData:
+  PORT: "8080"
+  PLATFORM_URL: "https://api-3-135-43-26.sslip.io"
+  REDIS_URL: "agentgate-redis:6379"
+  # 64 hex chars = 32 bytes. ROTATE FOR PRODUCTION via KMS-rooted key.
+  ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  VAULT_TOKEN: "dev-root-token"
+  VAULT_ADDR: "http://agentgate-vault:8200"
+  VAULT_MOUNT: "secret"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,6 +23,8 @@ metadata:
   namespace: agentgate
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: agentgate-api
@@ -14,26 +34,54 @@ spec:
         app: agentgate-api
     spec:
       imagePullSecrets:
-      - name: ghcr-pull-secret
+        - name: ghcr-pull-secret
+      initContainers:
+        # Wait for Postgres + run migrations idempotently. The image
+        # contains psql + the migrations directory.
+        - name: migrate
+          image: ghcr.io/dvarshney1975-stack/agentgate-api:latest
+          imagePullPolicy: Always
+          command: ["/usr/local/bin/run-migrations"]
+          env:
+            - name: DATABASE_URL
+              value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@agentgate-postgres:5432/$(POSTGRES_DB)?sslmode=disable"
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
       containers:
-      - name: api
-        image: ghcr.io/dvarshney1975-stack/agentgate-api:bc293e70
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          requests:
-            memory: "32Mi"
-            cpu: "25m"
-          limits:
-            memory: "192Mi"
-            cpu: "200m"
+        - name: api
+          image: ghcr.io/dvarshney1975-stack/agentgate-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@agentgate-postgres:5432/$(POSTGRES_DB)?sslmode=disable"
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
+            - secretRef: { name: agentgate-config }
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "384Mi"
+              cpu: "500m"
 ---
 apiVersion: v1
 kind: Service
@@ -44,5 +92,5 @@ spec:
   selector:
     app: agentgate-api
   ports:
-  - port: 80
-    targetPort: 8080
+    - port: 80
+      targetPort: 8080

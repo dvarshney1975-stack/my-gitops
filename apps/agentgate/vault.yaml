@@ -1,0 +1,53 @@
+# Vault in dev mode (in-memory storage, root token "dev-root-token").
+# This is NOT production-grade — secrets are lost on pod restart, no
+# auto-unseal, no audit. Replace with a HashiCorp Vault HA install before
+# real customer traffic. Documented as a Phase-1 unblock.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgate-vault
+  namespace: agentgate
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: agentgate-vault }
+  template:
+    metadata:
+      labels: { app: agentgate-vault }
+    spec:
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.17
+          args: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=dev-root-token"]
+          securityContext:
+            capabilities:
+              add: ["IPC_LOCK"]
+          env:
+            - name: VAULT_DEV_ROOT_TOKEN_ID
+              value: dev-root-token
+            - name: VAULT_DEV_LISTEN_ADDRESS
+              value: 0.0.0.0:8200
+            - name: VAULT_LOG_LEVEL
+              value: warn
+          ports:
+            - containerPort: 8200
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 192Mi }
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true
+              port: 8200
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentgate-vault
+  namespace: agentgate
+spec:
+  selector: { app: agentgate-vault }
+  ports:
+    - port: 8200
+      targetPort: 8200

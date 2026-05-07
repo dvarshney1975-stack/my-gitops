@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agentgate-postgres-data
+  namespace: agentgate
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentgate-postgres-creds
+  namespace: agentgate
+type: Opaque
+stringData:
+  POSTGRES_USER: agentgate
+  POSTGRES_PASSWORD: agentgate-dev-CHANGEME-prod-uses-vault
+  POSTGRES_DB: agentgate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgate-postgres
+  namespace: agentgate
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: agentgate-postgres }
+  template:
+    metadata:
+      labels: { app: agentgate-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
+          ports:
+            - containerPort: 5432
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "agentgate"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: agentgate-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentgate-postgres
+  namespace: agentgate
+spec:
+  selector: { app: agentgate-postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432
