@@ -17,7 +17,7 @@ spec:
       - name: ghcr-pull-secret
       containers:
       - name: marketplace
-        image: ghcr.io/dvarshney1975-stack/agentgate-marketplace:4da46686
+        image: ghcr.io/dvarshney1975-stack/agentgate-marketplace:3db82b15
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
