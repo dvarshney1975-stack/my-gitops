@@ -55,7 +55,7 @@ spec:
               echo "catalog ready."
       containers:
         - name: seed
-          image: ghcr.io/dvarshney1975-stack/agentgate-seed-demo-tenant:latest
+          image: ghcr.io/dvarshney1975-stack/agentgate-seed-demo-tenant:c55fccea
           imagePullPolicy: Always
           env:
             - name: DATABASE_URL
