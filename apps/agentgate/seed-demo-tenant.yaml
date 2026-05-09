@@ -1,0 +1,68 @@
+# Demo tenant seed Job
+#
+# Runs once per release. Idempotent against repeat runs (uses ON CONFLICT
+# everywhere, plus deterministic IDs/secrets). Generates the acme.io
+# tenant + 3 installs + policy rule + resource binding + Vault entries.
+#
+# Without this Job the /acme demo page shows empty state forever.
+#
+# generation strategy: a Job is fine here because:
+#   1. It must complete before the worker starts (depends on tenant rows
+#      and vault credentials existing).
+#   2. The Flux sync re-creates it whenever the image tag changes — so
+#      every deploy gets a fresh seed run.
+#
+# We use `generateName` + `restartPolicy: Never` + `backoffLimit: 4` so
+# Flux can replace cleanly on each rollout.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: agentgate-seed-demo-tenant-
+  namespace: agentgate
+  labels:
+    app: agentgate-seed-demo-tenant
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: agentgate-seed-demo-tenant
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      # The seed needs the agent catalog already in place (it looks up
+      # agents by slug). The migration runner does that as part of the
+      # api init container, so we just block until any agent rows exist.
+      initContainers:
+        - name: wait-for-catalog
+          image: postgres:16-alpine
+          env:
+            - name: PGHOST
+              value: agentgate-postgres
+            - name: PGDATABASE
+              value: agentgate
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
+          command:
+            - sh
+            - -c
+            - |
+              until psql -tAc "SELECT COUNT(*) FROM agents WHERE slug='invoice-processor'" 2>/dev/null | grep -q '^1$'; do
+                echo "waiting for agent catalog (invoice-processor)..."
+                sleep 3
+              done
+              echo "catalog ready."
+      containers:
+        - name: seed
+          image: ghcr.io/dvarshney1975-stack/agentgate-seed-demo-tenant:latest
+          imagePullPolicy: Always
+          env:
+            - name: DATABASE_URL
+              value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@agentgate-postgres:5432/$(POSTGRES_DB)?sslmode=disable"
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
+            - secretRef: { name: agentgate-config }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 128Mi }

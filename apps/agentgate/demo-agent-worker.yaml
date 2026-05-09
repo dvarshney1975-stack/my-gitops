@@ -1,0 +1,42 @@
+# Demo agent worker — simulates the Invoice Processor agent.
+# Loops every ~20s against the broker, generating realistic mixed
+# traffic (success / HITL / deny / files:read). The /acme audit feed
+# and /inbox HITL queue depend on this Pod running.
+#
+# Depends on the seed Job having completed (otherwise no demo tenant
+# exists in Postgres and exchanges 401). We don't model that as a
+# strict dependency in K8s — instead the worker just retries the
+# token-exchange loop until it works, which is what real agents do.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgate-demo-agent-worker
+  namespace: agentgate
+  labels:
+    app: agentgate-demo-agent-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentgate-demo-agent-worker
+  template:
+    metadata:
+      labels:
+        app: agentgate-demo-agent-worker
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: worker
+          image: ghcr.io/dvarshney1975-stack/agentgate-demo-agent-worker:latest
+          imagePullPolicy: Always
+          env:
+            - name: BROKER_URL
+              value: "http://agentgate-api"
+            - name: FINANCE_API_URL
+              value: "http://agentgate-demo-finance-api:9090"
+            - name: LOOP_INTERVAL
+              value: "20s"
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits:   { cpu: 100m, memory: 96Mi }

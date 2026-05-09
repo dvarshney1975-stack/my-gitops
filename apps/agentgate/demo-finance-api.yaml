@@ -1,0 +1,67 @@
+# Acme Finance API — the customer-side endpoint the synthetic agent
+# calls. Wraps three handlers (/transfers/, /invoices/, /healthz) behind
+# the AgentGate sidecar SDK, so every authenticated call has gone
+# through real JWT verification + audience pinning + path-prefix glob.
+#
+# The Service exposes it inside the cluster only; the demo-agent-worker
+# Pod hits agentgate-demo-finance-api:9090. There's no ingress — this
+# is meant as a "tenant-internal" target, not a public endpoint.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgate-demo-finance-api
+  namespace: agentgate
+  labels:
+    app: agentgate-demo-finance-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentgate-demo-finance-api
+  template:
+    metadata:
+      labels:
+        app: agentgate-demo-finance-api
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: finance
+          image: ghcr.io/dvarshney1975-stack/agentgate-demo-finance-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9090
+          env:
+            - name: BROKER_URL
+              value: "http://agentgate-api"
+            - name: PORT
+              value: ":9090"
+            - name: TENANT_ID
+              value: "acme0000-0000-0000-0000-000000000001"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentgate-demo-finance-api
+  namespace: agentgate
+spec:
+  selector:
+    app: agentgate-demo-finance-api
+  ports:
+    - port: 9090
+      targetPort: 9090
