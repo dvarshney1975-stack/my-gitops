@@ -43,17 +43,22 @@ spec:
       initContainers:
         - name: wait-for-catalog
           image: postgres:16-alpine
+          # The cluster secret carries POSTGRES_USER / POSTGRES_PASSWORD /
+          # POSTGRES_DB (the Postgres image's env names). psql wants the
+          # PG* equivalents — bridge here so we don't have to change the
+          # shared secret schema.
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
           env:
             - name: PGHOST
               value: agentgate-postgres
-            - name: PGDATABASE
-              value: agentgate
-          envFrom:
-            - secretRef: { name: agentgate-postgres-creds }
           command:
             - sh
             - -c
             - |
+              export PGUSER="$POSTGRES_USER"
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              export PGDATABASE="$POSTGRES_DB"
               until psql -tAc "SELECT COUNT(*) FROM agents WHERE slug='invoice-processor'" 2>/dev/null | grep -q '^1$'; do
                 echo "waiting for agent catalog (invoice-processor)..."
                 sleep 3
