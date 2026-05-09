@@ -41,7 +41,7 @@ spec:
         # Wait for Postgres + run migrations idempotently. The image
         # contains psql + the migrations directory.
         - name: migrate
-          image: ghcr.io/dvarshney1975-stack/agentgate-api:2cf9fc5d
+          image: ghcr.io/dvarshney1975-stack/agentgate-api:64610950
           imagePullPolicy: Always
           command: ["/usr/local/bin/run-migrations"]
           env:
@@ -54,7 +54,7 @@ spec:
             limits:   { cpu: 200m, memory: 128Mi }
       containers:
         - name: api
-          image: ghcr.io/dvarshney1975-stack/agentgate-api:2cf9fc5d
+          image: ghcr.io/dvarshney1975-stack/agentgate-api:64610950
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
