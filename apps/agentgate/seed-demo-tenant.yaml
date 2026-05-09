@@ -17,12 +17,18 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  generateName: agentgate-seed-demo-tenant-
+  name: agentgate-seed-demo-tenant
   namespace: agentgate
   labels:
     app: agentgate-seed-demo-tenant
+  annotations:
+    # Force Flux to delete + recreate this Job on every reconcile when
+    # the spec changes. Without this, an old Completed Job blocks new
+    # spec updates because Job.spec is largely immutable.
+    kustomize.toolkit.fluxcd.io/force: enabled
 spec:
   backoffLimit: 4
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
