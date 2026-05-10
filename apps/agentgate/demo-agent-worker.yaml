@@ -28,7 +28,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: worker
-          image: ghcr.io/dvarshney1975-stack/agentgate-demo-agent-worker:2133a21f
+          image: ghcr.io/dvarshney1975-stack/agentgate-demo-agent-worker:f6b94c70
           imagePullPolicy: Always
           env:
             - name: BROKER_URL
