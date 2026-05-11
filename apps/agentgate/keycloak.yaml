@@ -1,0 +1,273 @@
+# Keycloak for the Acme.io demo tenant.
+#
+# Runs in --import-realm mode so the acme.io realm + users + clients are
+# created on first boot from the ConfigMap below. No manual setup.
+#
+# Resource envelope is tight (request 320Mi, limit 512Mi, heap 256-384Mi)
+# because the cluster is a t3.small. start-dev mode is intentional — it
+# allows HTTP on the loopback ingress path and skips the production build
+# step. NEVER deploy this profile in actual prod; see start --optimized.
+#
+# Database: shared agentgate-postgres, separate logical DB 'keycloak'.
+# The agentgate-keycloak-db-init Job creates the DB if missing.
+
+---
+# ─── Init Job: create the keycloak database in the shared postgres ────────────
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentgate-keycloak-db-init
+  namespace: agentgate
+  annotations:
+    # Re-run on every change (idempotent SQL).
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef: { name: agentgate-postgres-creds }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              echo "Waiting for postgres..."
+              until pg_isready -h agentgate-postgres -U "$POSTGRES_USER"; do sleep 2; done
+              echo "Creating keycloak db if missing..."
+              psql -h agentgate-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tc \
+                "SELECT 1 FROM pg_database WHERE datname='keycloak'" | grep -q 1 \
+                || psql -h agentgate-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+                "CREATE DATABASE keycloak"
+              echo "Done."
+
+---
+# ─── Realm + users + clients (mounted into /opt/keycloak/data/import) ─────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentgate-keycloak-realm
+  namespace: agentgate
+data:
+  acme.io-realm.json: |
+    {
+      "realm": "acme.io",
+      "enabled": true,
+      "displayName": "Acme Corp",
+      "registrationAllowed": false,
+      "resetPasswordAllowed": false,
+      "sslRequired": "none",
+      "loginTheme": "keycloak",
+      "accessTokenLifespan": 600,
+      "ssoSessionIdleTimeout": 1800,
+      "users": [
+        {
+          "username": "alice",
+          "email": "alice@acme.io",
+          "firstName": "Alice",
+          "lastName": "Morgan",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            { "type": "password", "value": "acme-demo-pw", "temporary": false }
+          ],
+          "realmRoles": ["user"]
+        },
+        {
+          "username": "bob",
+          "email": "bob@acme.io",
+          "firstName": "Bob",
+          "lastName": "Chen",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            { "type": "password", "value": "acme-demo-pw", "temporary": false }
+          ],
+          "realmRoles": ["user", "approver"]
+        },
+        {
+          "username": "carol",
+          "email": "carol@acme.io",
+          "firstName": "Carol",
+          "lastName": "Reyes",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            { "type": "password", "value": "acme-demo-pw", "temporary": false }
+          ],
+          "realmRoles": ["user", "security_lead"]
+        }
+      ],
+      "roles": {
+        "realm": [
+          { "name": "user" },
+          { "name": "approver" },
+          { "name": "security_lead" }
+        ]
+      },
+      "clients": [
+        {
+          "clientId": "agentgate-broker",
+          "protocol": "openid-connect",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "broker-demo-secret-CHANGE-IN-PROD",
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true,
+          "authorizationServicesEnabled": false,
+          "redirectUris": [
+            "https://api-3-135-43-26.sslip.io/v1/consent/callback",
+            "http://localhost:8080/v1/consent/callback"
+          ],
+          "webOrigins": ["+"],
+          "attributes": {
+            "access.token.lifespan": "600"
+          }
+        },
+        {
+          "clientId": "agentgate-marketplace",
+          "protocol": "openid-connect",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "redirectUris": [
+            "https://marketplace-3-135-43-26.sslip.io/*"
+          ],
+          "webOrigins": [
+            "https://marketplace-3-135-43-26.sslip.io"
+          ]
+        }
+      ]
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgate-keycloak
+  namespace: agentgate
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # single replica, can't tolerate two during rollout
+  selector:
+    matchLabels: { app: agentgate-keycloak }
+  template:
+    metadata:
+      labels: { app: agentgate-keycloak }
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:25.0.6
+          args:
+            - "start-dev"
+            - "--import-realm"
+            - "--http-enabled=true"
+            - "--proxy-headers=xforwarded"
+            - "--hostname-strict=false"
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://agentgate-postgres:5432/keycloak
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: agentgate-postgres-creds
+                  key: POSTGRES_USER
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentgate-postgres-creds
+                  key: POSTGRES_PASSWORD
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              value: agentgate-demo-admin-CHANGE
+            - name: KC_HOSTNAME
+              value: https://keycloak-3-135-43-26.sslip.io
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: JAVA_OPTS_KC_HEAP
+              value: "-Xms256m -Xmx384m"
+            - name: JAVA_OPTS_APPEND
+              value: "-XX:+UseSerialGC -Djdk.tracePinnedThreads=full"
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 320Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          startupProbe:
+            httpGet: { path: /health/ready, port: 8080 }
+            failureThreshold: 60     # Keycloak startup is slow (~60-90s)
+            periodSeconds: 5
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 8080 }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 30
+            failureThreshold: 5
+      volumes:
+        - name: realm
+          configMap:
+            name: agentgate-keycloak-realm
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentgate-keycloak
+  namespace: agentgate
+spec:
+  selector: { app: agentgate-keycloak }
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentgate-keycloak
+  namespace: agentgate
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - keycloak-3-135-43-26.sslip.io
+      secretName: agentgate-keycloak-tls
+  rules:
+    - host: keycloak-3-135-43-26.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentgate-keycloak
+                port:
+                  number: 80
