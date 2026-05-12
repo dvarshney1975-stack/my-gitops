@@ -17,7 +17,7 @@ spec:
       - name: ghcr-pull-secret
       containers:
       - name: admin
-        image: ghcr.io/dvarshney1975-stack/agentgate-admin:9206d5a3
+        image: ghcr.io/dvarshney1975-stack/agentgate-admin:c573fae5
         imagePullPolicy: Always
         ports:
         - containerPort: 80
