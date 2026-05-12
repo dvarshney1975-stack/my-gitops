@@ -198,8 +198,6 @@ spec:
               value: "true"
             - name: JAVA_OPTS_KC_HEAP
               value: "-Xms256m -Xmx384m"
-            - name: JAVA_OPTS_APPEND
-              value: "-XX:+UseSerialGC -Djdk.tracePinnedThreads=full"
           ports:
             - containerPort: 8080
               name: http
