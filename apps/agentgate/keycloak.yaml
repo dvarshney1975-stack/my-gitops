@@ -197,7 +197,7 @@ spec:
             - name: KC_HEALTH_ENABLED
               value: "true"
             - name: JAVA_OPTS_KC_HEAP
-              value: "-Xms256m -Xmx384m"
+              value: "-Xms256m -Xmx512m"
           ports:
             - containerPort: 8080
               name: http
@@ -208,13 +208,16 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 320Mi
+              memory: 384Mi
             limits:
-              cpu: 1000m
-              memory: 512Mi
+              cpu: 1500m
+              memory: 768Mi
           startupProbe:
             httpGet: { path: /health/ready, port: 8080 }
-            failureThreshold: 60     # Keycloak startup is slow (~60-90s)
+            # On a small VPS with swap pressure, the "Updating the
+            # configuration" + JVM warm-up can take 5-10 minutes on
+            # first boot. After that, restarts are quicker.
+            failureThreshold: 240    # 240 * 5s = 20 min ceiling
             periodSeconds: 5
           readinessProbe:
             httpGet: { path: /health/ready, port: 8080 }
