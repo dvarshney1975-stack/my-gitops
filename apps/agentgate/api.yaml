@@ -64,13 +64,23 @@ spec:
           envFrom:
             - secretRef: { name: agentgate-postgres-creds }
             - secretRef: { name: agentgate-config }
+          # Readiness exercises the data-plane dependency chain (Postgres
+          # ping + Redis ping). Returns 503 on dependency failure so the
+          # pod is taken out of Service Endpoints and traffic drains.
+          # On 2026-05-13 a 9-hour silent outage looked green because
+          # /health was HTTP-only and didn't notice that audit writes
+          # were 100 % failing. /health/ready closes that gap.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
-            failureThreshold: 6
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness stays on the cheap process-is-alive probe — restarts
+          # only when the HTTP server itself wedges, not when downstream
+          # deps wobble (Postgres failover, Redis cluster reshard).
           livenessProbe:
             httpGet:
               path: /health
