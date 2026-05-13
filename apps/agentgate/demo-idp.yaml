@@ -25,7 +25,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: idp
-          image: ghcr.io/dvarshney1975-stack/agentgate-demo-idp:f6398e4e
+          image: ghcr.io/dvarshney1975-stack/agentgate-demo-idp:d8b194a5
           imagePullPolicy: Always
           env:
             - name: ISSUER_URL
