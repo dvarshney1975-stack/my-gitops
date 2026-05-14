@@ -27,7 +27,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: finance
-          image: ghcr.io/dvarshney1975-stack/agentgate-demo-finance-api:666a0ba2
+          image: ghcr.io/dvarshney1975-stack/agentgate-demo-finance-api:47db3110
           imagePullPolicy: Always
           ports:
             - containerPort: 9090
